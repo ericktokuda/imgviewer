@@ -1,8 +1,9 @@
 import tkinter
-from tkinter import messagebox as tkmessagebox
+import tkinter.messagebox
+import tkinter.filedialog
 import PIL
-from PIL import Image as PILImage
-from PIL import ImageTk as PILImageTk
+import PIL.Image
+import PIL.ImageTk
 
 class MyApp(tkinter.Frame):
     def __init__(self, parent=None):
@@ -23,13 +24,15 @@ class MyApp(tkinter.Frame):
         self.canvas.pack()
 
     def setimageoncanvas(self, imagepath):
-        photo = PILImageTk.PhotoImage(PILImage.open(imagepath))
+        photo = PIL.ImageTk.PhotoImage(PIL.Image.open(imagepath))
         self.im = photo  # Avoid garbage collector (self.parent.im ?)
         self.canvas.itemconfig(self.imoncanvas, image=photo)
 
         self.canvas.create_line(0,0,100,100, width=5)
 
     def create_controls(self):
+        obutton = tkinter.Button(self, text='Open folder', command=
+                lambda: self.openfolder(0))
         pbutton = tkinter.Button(self, text='Previous picture', command=
                 lambda: self.move(-1))
         nbutton = tkinter.Button(self, text='Next picture', command=
@@ -38,8 +41,10 @@ class MyApp(tkinter.Frame):
 
         self.parent.bind("<Left>", self.moveback)
         self.parent.bind("<Right>", self.movenext)
+        self.parent.bind("<O>", self.openfolder)
 
 
+        obutton.pack(side=tkinter.LEFT)
         pbutton.pack(side=tkinter.LEFT)
         nbutton.pack(side=tkinter.LEFT)
         qbutton.pack(side=tkinter.LEFT)
@@ -54,18 +59,15 @@ class MyApp(tkinter.Frame):
 
     def move(self, delta):
         #if not (0 <= self.current + delta < len(self.image_list)):
-            #tkmessagebox.showinfo('End', 'No more image.')
+            #tkinter.messagebox.showinfo('End', 'No more image.')
             #return
 
         imagepath = "dog.jpg" if delta == 1 else "cat.jpg"
-        #self.current += delta
         self.setimageoncanvas(imagepath)
-        #image = PILImage.open(self.image_list[self.current])
-        #photo = PILImageTk.PhotoImage(image)
-        #self.canvas.itemconfig(self.imageoncanvas, image=photo)
-        #label['text'] = self.text_list[self.current]
-        #label['image'] = photo
-        #label.photo = photo
+
+    def openfolder(self, event):
+        self.curdir = tkinter.filedialog.askdirectory()
+        print("Now I have to update to " + self.curdir)
 
 #########################################################
 root = tkinter.Tk()
