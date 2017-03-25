@@ -3,7 +3,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 tags
-*swp
+*.swp
 *json
 
 # C extensions

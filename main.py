@@ -12,63 +12,61 @@ class MyApp(tkinter.Frame):
     def __init__(self, parent=None, initialdir=os.getcwd()):
         super().__init__()
         self.parent = parent
-
         self.curid = 0
+        self.curdir = initialdir
         self.images = listfiles(initialdir)
-        self.text_list = self.images
-        self.curimage = {}
 
         self.create_canvas()
-
+        self.update_canvas()
         self.create_controls()
         self.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 
     def create_canvas(self):
-        self.canvas = tkinter.Canvas(self)
-        self.imlabel = tkinter.Label(self.canvas, text='Please choose a folder')
-        self.imlabel.pack(fill=tkinter.BOTH, expand=tkinter.YES)
-        self.canvas.create_line(0,0,100,100, fill='yellow', width=5)
-
+        frame = tkinter.Frame(self)
+        self.canvas = tkinter.Canvas(frame)
+        frame.pack(fill=tkinter.BOTH, expand=tkinter.YES)
         self.canvas.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 
-    def setimageoncanvas(self, imagepath):
-        w = self.canvas.winfo_width()
-        h = self.canvas.winfo_height()
+    def update_canvas(self):
+        self.im = None
+        self.canvas.delete("all")
 
-        canvasratio = w/(h+0.00001)
+        imagepath = self.images[self.curid]
+        w = self.parent.winfo_width()
+        h = self.parent.winfo_height()
+        print(w,h)
 
-        pilim = PIL.Image.open(imagepath)
-
+        canvasratio = w/(h-30)
+        pilim = PIL.Image.open(os.path.join(self.curdir, imagepath))
         imratio = pilim.size[0]/pilim.size[1]
 
         if imratio > canvasratio:
             factor = w/pilim.size[0]
         else:
-            factor = (h-30)/pilim.size[1]
+            factor = (h)/pilim.size[1]
 
+        self.imfactor = factor
         pilim = pilim.resize((int(pilim.size[0]*factor), int(pilim.size[1]*factor)))
-        photo = PIL.ImageTk.PhotoImage(pilim)
+        self.curimage = PIL.ImageTk.PhotoImage(pilim)
 
-        self.curimage['path'] = imagepath
-        self.curimage['im'] = photo
-        self.curimage['label'] = imagepath  # Avoid garbage collector (self.parent.im ?)
+        posx = int(w/2)
+        posy = int(h/2)
 
-        text = self.curimage['label']
-        im = self.curimage['im']
-        c = tkinter.CENTER
-
-        #self.canvas.create_line(0,0,500,100, fill='yellow', width=5)
-        self.imlabel.config(text=text, fg='white', bg='black', image=im, compound=c)
-
+        self.im = self.canvas.create_image(posx, posy, image=self.curimage)
+        imagerect = self.canvas.bbox(self.im)
+        #self.canvas.create_line(imagerect[0],imagerect[1], 100,100, fill='yellow', width=5)
+        self.draw_bboxes()
+        self.update()
 
     def create_controls(self):
-        obutton = tkinter.Button(self, text='Open folder', command=
+        frame = tkinter.Frame(self, pady=5)
+        obutton = tkinter.Button(frame, text='Open folder', command=
                 lambda: self.openfolder(0))
-        pbutton = tkinter.Button(self, text='Previous picture', command=
+        pbutton = tkinter.Button(frame, text='Previous picture', command=
                 lambda: self.move(-1))
-        nbutton = tkinter.Button(self, text='Next picture', command=
+        nbutton = tkinter.Button(frame, text='Next picture', command=
                 lambda: self.move(+1))
-        qbutton = tkinter.Button(self, text='Quit', command=self.parent.quit)
+        qbutton = tkinter.Button(frame, text='Quit', command=self.parent.quit)
 
         self.parent.bind("<Left>", lambda x: self.move(-1))
         self.parent.bind("<Right>", lambda x: self.move(1))
@@ -78,18 +76,29 @@ class MyApp(tkinter.Frame):
         pbutton.pack(side=tkinter.LEFT)
         nbutton.pack(side=tkinter.LEFT)
         qbutton.pack(side=tkinter.LEFT)
+        frame.pack()
 
     def move(self, delta):
-
         self.curid += 1
         if self.curid < 0: self.curid = len(self.images) - 1
         elif self.curid >= len(self.images): self.curid = 0
 
-        self.setimageoncanvas(self.images[self.curid])
+        self.update_canvas()
 
     def openfolder(self, event):
         self.curdir = tkinter.filedialog.askdirectory()
         print("Now I have to update to " + self.curdir)
+
+    def draw_bboxes(self):
+        imageid = os.path.splitext(self.images[self.curid])[0]
+        print(imageid)
+        bboxes = db_getbboxes(conn, imageid)
+        print(bboxes)
+        for b in bboxes:
+            a = []
+            for i in range(0,4): a.append(int(b[i]*self.imfactor))
+            self.canvas.create_rectangle(a[0], a[1], a[2], a[3], width=5)
+
 
 def listfiles(indir, ext='jpg'):
     images = []
@@ -104,7 +113,6 @@ def listfiles(indir, ext='jpg'):
     return images
 
 def db_getbboxes(conn, imageid):
-
     cur = conn.cursor()
     query = """SELECT x_min, y_min, x_max, y_max, prob, classid FROM Bbox """ \
     """ WHERE imageid={} AND methodid=7""".format(imageid);
@@ -114,9 +122,11 @@ def db_getbboxes(conn, imageid):
     return rows
 
 #########################################################
+initialdir = '/home/dufresne/temp/carmera_images/fff/'
 conn = utils.db_connect('config/db.json')
-#db_getbboxes(conn, '124')
 root = tkinter.Tk()
-root.geometry('1280x960')
-myapp = MyApp(root, )
+root.geometry('600x400')
+root.update()
+#root.geometry('1280x960')
+myapp = MyApp(root, initialdir)
 root.mainloop()
