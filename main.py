@@ -1,18 +1,21 @@
+#!/usr/bin/env python3
+import os
 import tkinter
 import tkinter.messagebox
 import tkinter.filedialog
 import PIL
 import PIL.Image
 import PIL.ImageTk
+import utils
 
 class MyApp(tkinter.Frame):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, parent=None, initialdir=os.getcwd()):
+        super().__init__()
         self.parent = parent
 
-        self.current = 0
-        self.image_list = ['cat.jpg', 'dog.jpg']
-        self.text_list = [ 'cat', 'dog']
+        self.curid = 0
+        self.images = listfiles(initialdir)
+        self.text_list = self.images
         self.curimage = {}
 
         self.create_canvas()
@@ -24,11 +27,11 @@ class MyApp(tkinter.Frame):
         self.canvas = tkinter.Canvas(self)
         self.imlabel = tkinter.Label(self.canvas, text='Please choose a folder')
         self.imlabel.pack(fill=tkinter.BOTH, expand=tkinter.YES)
+        self.canvas.create_line(0,0,100,100, fill='yellow', width=5)
 
         self.canvas.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 
     def setimageoncanvas(self, imagepath):
-
         w = self.canvas.winfo_width()
         h = self.canvas.winfo_height()
 
@@ -54,9 +57,9 @@ class MyApp(tkinter.Frame):
         im = self.curimage['im']
         c = tkinter.CENTER
 
+        #self.canvas.create_line(0,0,500,100, fill='yellow', width=5)
         self.imlabel.config(text=text, fg='white', bg='black', image=im, compound=c)
 
-        self.canvas.create_line(0,0,100,100, width=5)
 
     def create_controls(self):
         obutton = tkinter.Button(self, text='Open folder', command=
@@ -77,19 +80,43 @@ class MyApp(tkinter.Frame):
         qbutton.pack(side=tkinter.LEFT)
 
     def move(self, delta):
-        if not (0 <= self.current + delta < len(self.image_list)):
-            tkinter.messagebox.showinfo('End', 'Back to the first image.')
 
-        imagepath = "dog.jpg" if delta == 1 else "cat.jpg"
-        self.setimageoncanvas(imagepath)
+        self.curid += 1
+        if self.curid < 0: self.curid = len(self.images) - 1
+        elif self.curid >= len(self.images): self.curid = 0
+
+        self.setimageoncanvas(self.images[self.curid])
 
     def openfolder(self, event):
         self.curdir = tkinter.filedialog.askdirectory()
         print("Now I have to update to " + self.curdir)
 
+def listfiles(indir, ext='jpg'):
+    images = []
+    files = os.listdir(indir)
+
+    for f in files:
+        _file = os.path.join(indir, f)
+        if os.path.isdir(_file) or not _file.lower().endswith(ext):
+            continue
+        images.append(f)
+
+    return images
+
+def db_getbboxes(conn, imageid):
+
+    cur = conn.cursor()
+    query = """SELECT x_min, y_min, x_max, y_max, prob, classid FROM Bbox """ \
+    """ WHERE imageid={} AND methodid=7""".format(imageid);
+    cur.execute(query)
+    conn.commit()
+    rows = cur.fetchall()
+    return rows
+
 #########################################################
+conn = utils.db_connect('config/db.json')
+#db_getbboxes(conn, '124')
 root = tkinter.Tk()
-root.geometry('600x400')
-#root.geometry('1280x960')
-myapp = MyApp(root)
+root.geometry('1280x960')
+myapp = MyApp(root, )
 root.mainloop()
