@@ -8,6 +8,23 @@ import PIL.Image
 import PIL.ImageTk
 import utils
 
+GNDTRUTHID = 2
+
+colors = [
+'blue',
+'red',
+'yellow',
+'brown',
+'green',
+'purple',
+'navy',
+'firebrick',
+'gold',
+'sienna',
+'magenta',
+'cornflower blue',
+]
+
 class MyApp(tkinter.Frame):
     def __init__(self, parent=None, initialdir=os.getcwd()):
         super().__init__()
@@ -34,7 +51,6 @@ class MyApp(tkinter.Frame):
         imagepath = self.images[self.curid]
         w = self.parent.winfo_width()
         h = self.parent.winfo_height()
-        print(w,h)
 
         canvasratio = w/(h-30)
         pilim = PIL.Image.open(os.path.join(self.curdir, imagepath))
@@ -52,10 +68,10 @@ class MyApp(tkinter.Frame):
         posx = int(w/2)
         posy = int(h/2)
 
+        self.canvas.create_text((0, 0), text=imagepath)
         self.im = self.canvas.create_image(posx, posy, image=self.curimage)
-        imagerect = self.canvas.bbox(self.im)
-        #self.canvas.create_line(imagerect[0],imagerect[1], 100,100, fill='yellow', width=5)
-        self.draw_bboxes()
+        self.draw_bboxes(7)
+        self.draw_gndtruths()
         self.update()
 
     def create_controls(self):
@@ -89,15 +105,28 @@ class MyApp(tkinter.Frame):
         self.curdir = tkinter.filedialog.askdirectory()
         print("Now I have to update to " + self.curdir)
 
-    def draw_bboxes(self):
+    def draw_gndtruths(self):
+        draw_bboxes(self, GNDTRUTHID)
+
+    def draw_bboxes(self, methodid):
         imageid = os.path.splitext(self.images[self.curid])[0]
-        print(imageid)
-        bboxes = db_getbboxes(conn, imageid)
-        print(bboxes)
+        bboxes = db_getbboxes(conn, imageid, methodid, 1)
+
+        imcoords = self.canvas.coords(self.im)
+        dx = imcoords[0] - int(self.curimage.width()/2)
+        dy = imcoords[1] - int(self.curimage.height()/2)
+        delta = [dx, dy, dx, dy]
+        bboxline = imcoords[0]/100
+
         for b in bboxes:
-            a = []
-            for i in range(0,4): a.append(int(b[i]*self.imfactor))
-            self.canvas.create_rectangle(a[0], a[1], a[2], a[3], width=5)
+            p = []
+
+            col = "red"
+            for i in range(0,4):
+                p.append(int(b[i]*self.imfactor) + delta[i])
+
+            self.canvas.create_rectangle(p[0], p[1], p[2], p[3],
+                    width=bboxline, outline=col)
 
 
 def listfiles(indir, ext='jpg'):
@@ -112,17 +141,20 @@ def listfiles(indir, ext='jpg'):
 
     return images
 
-def db_getbboxes(conn, imageid):
+def db_getbboxes(conn, imageid, methodid, classid=None):
     cur = conn.cursor()
     query = """SELECT x_min, y_min, x_max, y_max, prob, classid FROM Bbox """ \
-    """ WHERE imageid={} AND methodid=7""".format(imageid);
+            """ WHERE imageid={} AND methodid={} """. \
+            format(imageid, methodid);
+    if classid: query += """AND classid={}""".format(classid)
+
     cur.execute(query)
     conn.commit()
     rows = cur.fetchall()
     return rows
 
 #########################################################
-initialdir = '/home/dufresne/temp/carmera_images/fff/'
+initialdir = os.getcwd()
 conn = utils.db_connect('config/db.json')
 root = tkinter.Tk()
 root.geometry('600x400')
