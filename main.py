@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+""" Image viewer based on Tkinter and integrated to the database.
+"""
+##########################################################IMPORTS
+import argparse
 import os
 import tkinter
 import tkinter.messagebox
@@ -7,10 +11,12 @@ import PIL
 import PIL.Image
 import PIL.ImageTk
 import utils
+import time
 
+##########################################################DEFINES
 GNDTRUTHID = 2
-
-colors = [
+DETECTIONID = 7
+COLORS = [
 'blue',
 'red',
 'yellow',
@@ -23,6 +29,10 @@ colors = [
 'sienna',
 'magenta',
 'cornflower blue',
+'tomato',
+'khaki',
+'burlywood',
+'PaleGreen1',
 ]
 
 class MyApp(tkinter.Frame):
@@ -32,15 +42,16 @@ class MyApp(tkinter.Frame):
         self.curid = 0
         self.curdir = initialdir
         self.images = listfiles(initialdir)
-
+        self.conn = utils.db_connect('config/db.json')
+        self.parent.bind("<Key>", self.onkeypress)
         self.create_canvas()
         self.update_canvas()
-        self.create_controls()
+        #self.create_controls()
         self.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 
     def create_canvas(self):
         frame = tkinter.Frame(self)
-        self.canvas = tkinter.Canvas(frame)
+        self.canvas = tkinter.Canvas(frame, background='black')
         frame.pack(fill=tkinter.BOTH, expand=tkinter.YES)
         self.canvas.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 
@@ -52,7 +63,8 @@ class MyApp(tkinter.Frame):
         w = self.parent.winfo_width()
         h = self.parent.winfo_height()
 
-        canvasratio = w/(h-30)
+        #canvasratio = w/(h-30)
+        canvasratio = w/(h)
         pilim = PIL.Image.open(os.path.join(self.curdir, imagepath))
         imratio = pilim.size[0]/pilim.size[1]
 
@@ -68,9 +80,9 @@ class MyApp(tkinter.Frame):
         posx = int(w/2)
         posy = int(h/2)
 
-        self.canvas.create_text((0, 0), text=imagepath)
         self.im = self.canvas.create_image(posx, posy, image=self.curimage)
-        self.draw_bboxes(7)
+        #self.canvas.create_text((posx, posy), text=imagepath)
+        self.draw_detections()
         self.draw_gndtruths()
         self.update()
 
@@ -79,14 +91,11 @@ class MyApp(tkinter.Frame):
         obutton = tkinter.Button(frame, text='Open folder', command=
                 lambda: self.openfolder(0))
         pbutton = tkinter.Button(frame, text='Previous picture', command=
-                lambda: self.move(-1))
+                lambda: self.change_image(-1))
         nbutton = tkinter.Button(frame, text='Next picture', command=
-                lambda: self.move(+1))
+                lambda: self.change_image(+1))
         qbutton = tkinter.Button(frame, text='Quit', command=self.parent.quit)
 
-        self.parent.bind("<Left>", lambda x: self.move(-1))
-        self.parent.bind("<Right>", lambda x: self.move(1))
-        self.parent.bind("<O>", self.openfolder)
 
         obutton.pack(side=tkinter.LEFT)
         pbutton.pack(side=tkinter.LEFT)
@@ -94,11 +103,22 @@ class MyApp(tkinter.Frame):
         qbutton.pack(side=tkinter.LEFT)
         frame.pack()
 
-    def move(self, delta):
-        self.curid += 1
+    def onkeypress(self, event):
+        k = event.keysym
+
+        if k == 'Left':
+            self.change_image(-1)
+        elif k == 'Right':
+            self.change_image(1)
+        elif k == 'O':
+            self.openfolder()
+        #else:
+            #print('{} key pressed.'.format(k))
+
+    def change_image(self, delta):
+        self.curid += delta 
         if self.curid < 0: self.curid = len(self.images) - 1
         elif self.curid >= len(self.images): self.curid = 0
-
         self.update_canvas()
 
     def openfolder(self, event):
@@ -106,11 +126,18 @@ class MyApp(tkinter.Frame):
         print("Now I have to update to " + self.curdir)
 
     def draw_gndtruths(self):
-        draw_bboxes(self, GNDTRUTHID)
+        self.draw_bboxes(GNDTRUTHID, 'black', (2,4))
 
-    def draw_bboxes(self, methodid):
+    def draw_detections(self):
+        self.draw_bboxes(DETECTIONID, COLORS[1], (2,6))
+
+    def draw_bboxes(self, methodid, color='red', dash=(1)):
+        t0 = time.time()
         imageid = os.path.splitext(self.images[self.curid])[0]
-        bboxes = db_getbboxes(conn, imageid, methodid, 1)
+        bboxes = db_getbboxes(self.conn, imageid, methodid)
+
+        t1 = time.time()
+        print('{:.1f} seconds to fetch from DB.'.format(t1-t0))
 
         imcoords = self.canvas.coords(self.im)
         dx = imcoords[0] - int(self.curimage.width()/2)
@@ -121,13 +148,12 @@ class MyApp(tkinter.Frame):
         for b in bboxes:
             p = []
 
-            col = "red"
             for i in range(0,4):
                 p.append(int(b[i]*self.imfactor) + delta[i])
 
+            classid = b[5]
             self.canvas.create_rectangle(p[0], p[1], p[2], p[3],
-                    width=bboxline, outline=col)
-
+                    width=bboxline, outline=color, dash=dash)
 
 def listfiles(indir, ext='jpg'):
     images = []
@@ -154,11 +180,25 @@ def db_getbboxes(conn, imageid, methodid, classid=None):
     return rows
 
 #########################################################
-initialdir = os.getcwd()
-conn = utils.db_connect('config/db.json')
-root = tkinter.Tk()
-root.geometry('600x400')
-root.update()
-#root.geometry('1280x960')
-myapp = MyApp(root, initialdir)
-root.mainloop()
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--path', default=None)
+    args = parser.parse_args()
+    return args
+
+def main():
+    args = parse_args()
+    indir = args.path if args.path else os.getcwd()
+    print(indir)
+    #conn = utils.db_connect('config/db.json')
+    root = tkinter.Tk()
+    root.geometry('600x400')
+    root.update()
+    #root.geometry('1280x960')
+    myapp = MyApp(root, indir)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
+
