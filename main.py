@@ -72,8 +72,11 @@ class MyApp(tkinter.Frame):
         t1 = time.time()
         logging.debug('{:.1f} seconds to display image.'.format(t1-t0))
         #self.canvas.create_text((posx, posy), text=imagepath)
-        self.draw_detections()
-        self.draw_gndtruths()
+
+        imageid = os.path.splitext(self.images[self.curid])[0]
+        bboxes = db_getbboxes(self.conn, imageid)
+        self.draw_detections(bboxes)
+        self.draw_gndtruths(bboxes)
         self.update()
 
     def create_controls(self):
@@ -132,20 +135,13 @@ class MyApp(tkinter.Frame):
         self.curdir = tkinter.filedialog.askdirectory()
         logging.debug("Now I have to update to " + self.curdir)
 
-    def draw_gndtruths(self):
-        self.draw_bboxes(GNDTRUTHID, 'black', (2,4))
+    def draw_gndtruths(self, bboxes):
+        self.draw_bboxes(bboxes, GNDTRUTHID, 'black', (2,4))
 
-    def draw_detections(self):
-        self.draw_bboxes(DETECTIONID)
+    def draw_detections(self, bboxes):
+        self.draw_bboxes(bboxes, DETECTIONID)
 
-    def draw_bboxes(self, methodid, color=None, dash=(2, 4)):
-        t0 = time.time()
-        imageid = os.path.splitext(self.images[self.curid])[0]
-        bboxes = db_getbboxes(self.conn, imageid, methodid)
-
-        t1 = time.time()
-        logging.debug('{:.1f} seconds to fetch from DB.'.format(t1-t0))
-
+    def draw_bboxes(self, bboxes, methodid, color=None, dash=(2, 4)):
         imcoords = self.canvas.coords(self.im)
         dx = imcoords[0] - int(self.curimage.width()/2)
         dy = imcoords[1] - int(self.curimage.height()/2)
@@ -154,11 +150,11 @@ class MyApp(tkinter.Frame):
 
         for b in bboxes:
             p = []
+            if b[6] != methodid: continue
             for i in range(0,4):
                 p.append(int(b[i]*self.imfactor) + delta[i])
 
             classid = b[5]
-            logging.debug(classid)
             col = color if color else self.colors[classid]
             self.canvas.create_rectangle(p[0], p[1], p[2], p[3],
                     width=bboxline, outline=col, dash=dash)
@@ -175,11 +171,11 @@ def listfiles(indir, ext='jpg'):
 
     return images
 
-def db_getbboxes(conn, imageid, methodid, classid=None):
+def db_getbboxes(conn, imageid, classid=None):
     cur = conn.cursor()
-    query = """SELECT x_min, y_min, x_max, y_max, prob, classid FROM Bbox """ \
-            """ WHERE imageid={} AND methodid={} """. \
-            format(imageid, methodid);
+    query = """SELECT x_min, y_min, x_max, y_max, prob, classid, methodid """ \
+            """ FROM Bbox WHERE imageid={}""". \
+            format(imageid);
     if classid: query += """AND classid={}""".format(classid)
 
     cur.execute(query)
