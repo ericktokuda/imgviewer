@@ -136,17 +136,17 @@ class MyApp(tkinter.Frame):
         logging.debug("Now I have to update to " + self.curdir)
 
     def draw_gndtruths(self, bboxes):
-        self.draw_bboxes(bboxes, GNDTRUTHID, 'black', (2,4))
+        self.draw_bboxes(bboxes, GNDTRUTHID, 'black', 0.5, 1)
 
     def draw_detections(self, bboxes):
         self.draw_bboxes(bboxes, DETECTIONID)
 
-    def draw_bboxes(self, bboxes, methodid, color=None, dash=(2, 4)):
+    def draw_bboxes(self, bboxes, methodid, color=None, width=1.0, dash=(2, 10)):
         imcoords = self.canvas.coords(self.im)
         dx = imcoords[0] - int(self.curimage.width()/2)
         dy = imcoords[1] - int(self.curimage.height()/2)
         delta = [dx, dy, dx, dy]
-        bboxline = imcoords[0]/100
+        bboxline = imcoords[0]/100 * width
 
         for b in bboxes:
             p = []
