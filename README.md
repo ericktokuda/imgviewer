@@ -2,5 +2,5 @@
 
 Bbox viewer for pascal VOC2007 submission format
 
-## Usage
-`python src/viewer.py --imdir <IMGDIR> --annotdir <ANNOTDIR>`
+## Example usage
+`python src/viewer.py --imdir ./data --annotdir ./data
