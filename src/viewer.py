@@ -11,26 +11,26 @@ import tkinter.font
 import PIL
 import PIL.Image
 import PIL.ImageTk
-import utils
 import time
 import logging
 import random
 
 ##########################################################DEFINES
-GNDTRUTHID = 2
-DETECTIONID = 7
+WINSIZE = '800x600'
 
 class MyApp(tkinter.Frame):
-    def __init__(self, parent=None, initialdir=os.getcwd()):
+    def __init__(self, parent=None, imdir='', annotdir=''):
         super().__init__()
         self.parent = parent
+        self.classes = []
         self.curid = 0
-        self.curdir = initialdir
-        self.images = listfiles(initialdir)
-        self.conn = utils.db_connect('config/db.json')
+        self.images = listfiles(imdir)
+        self.imdir = imdir
+        self.annotdir = annotdir
+
         self.parent.bind("<Key>", self.onkeypress)
         self.create_canvas()
-        self.colors = ['black'] + loadcolorsfromfile('tkcolors.txt')
+        self.colors = loadcolorsfromfile('tkcolors.txt') + ['black'] 
         self.update_canvas()
         self.parent.title(self.images[self.curid])
         #self.create_controls()
@@ -50,9 +50,8 @@ class MyApp(tkinter.Frame):
         w = self.parent.winfo_width()
         h = self.parent.winfo_height()
 
-        #canvasratio = w/(h-30)
         canvasratio = w/(h)
-        pilim = PIL.Image.open(os.path.join(self.curdir, imagepath))
+        pilim = PIL.Image.open(os.path.join(self.imdir, imagepath))
         imratio = pilim.size[0]/pilim.size[1]
 
         if imratio > canvasratio:
@@ -71,12 +70,12 @@ class MyApp(tkinter.Frame):
         self.im = self.canvas.create_image(posx, posy, image=self.curimage)
         t1 = time.time()
         logging.debug('{:.1f} seconds to display image.'.format(t1-t0))
-        #self.canvas.create_text((posx, posy), text=imagepath)
+        self.canvas.create_text((posx, posy), text=imagepath)
 
         imageid = os.path.splitext(self.images[self.curid])[0]
-        bboxes = db_getbboxes(self.conn, imageid)
+        bboxes = getbboxes_from_txt(imageid, self.annotdir)
         self.draw_detections(bboxes)
-        self.draw_gndtruths(bboxes)
+        #self.draw_gndtruths(bboxes)
         self.update()
 
     def create_controls(self):
@@ -113,21 +112,17 @@ class MyApp(tkinter.Frame):
         top = tkinter.Toplevel()
         top.title('Colors subtitle')
 
-        classesrows = db_getclasses(self.conn)
-
-        for i in range(0, 20):
+        for i in range(len(self.classes)):
             can = tkinter.Canvas(top,width=10,height=10)
             can.grid(row=i+1, column=1)
             can.create_rectangle(0,0,10,10,fill=self.colors[i+1])
-            myfont = tkinter.font.Font(family="Arial", size=24)
-            msg = tkinter.Message(top, text=classesrows[i][1], font=myfont, aspect=500)
+            myfont = tkinter.font.Font(family="Arial", size=12)
+            msg = tkinter.Message(top, text=self.classes[i], font=myfont, aspect=500)
             msg.grid(row=i+1, column=2, sticky=tkinter.W)
 
     def change_image(self, delta):
         newid = self.curid + delta 
         self.curid = newid % len(self.images)
-        #if self.curid < 0: self.curid = len(self.images) - 1
-        #elif self.curid >= len(self.images): self.curid = 0
         self.update_canvas()
         self.parent.title(self.images[self.curid])
 
@@ -139,9 +134,9 @@ class MyApp(tkinter.Frame):
         self.draw_bboxes(bboxes, GNDTRUTHID, 'black', 0.5, 1)
 
     def draw_detections(self, bboxes):
-        self.draw_bboxes(bboxes, DETECTIONID)
+        self.draw_bboxes(bboxes)
 
-    def draw_bboxes(self, bboxes, methodid, color=None, width=1.0, dash=(2, 10)):
+    def draw_bboxes(self, bboxes, color=None, width=1.0, dash=(2, 10)):
         imcoords = self.canvas.coords(self.im)
         dx = imcoords[0] - int(self.curimage.width()/2)
         dy = imcoords[1] - int(self.curimage.height()/2)
@@ -150,14 +145,17 @@ class MyApp(tkinter.Frame):
 
         for b in bboxes:
             p = []
-            if b[6] != methodid: continue
-            for i in range(0,4):
-                p.append(int(b[i]*self.imfactor) + delta[i])
+            for i in range(0, 4):
+                p.append(int(b[i+2]*self.imfactor) + delta[i])
 
-            classid = b[5]
-            col = color if color else self.colors[classid]
+            col = self.get_class_color(b[0])
             self.canvas.create_rectangle(p[0], p[1], p[2], p[3],
-                    width=bboxline, outline=col, dash=dash)
+                    width=bboxline, outline=col)
+
+    def get_class_color(self, clsname):
+        if clsname not in self.classes:
+            self.classes.append(clsname)
+        return self.colors[self.classes.index(clsname)]
 
 def listfiles(indir, ext='jpg'):
     images = []
@@ -171,26 +169,23 @@ def listfiles(indir, ext='jpg'):
 
     return images
 
-def db_getbboxes(conn, imageid, classid=None):
-    cur = conn.cursor()
-    query = """SELECT x_min, y_min, x_max, y_max, prob, classid, methodid """ \
-            """ FROM Bbox WHERE imageid={}""". \
-            format(imageid);
-    if classid: query += """AND classid={}""".format(classid)
+def getbboxes_from_txt(imid, annotdir):
+    annotpath = os.path.join(annotdir, imid + '.txt')
+    fh = open(annotpath)
 
-    cur.execute(query)
-    conn.commit()
-    rows = cur.fetchall()
-    return rows
-
-def db_getclasses(conn):
-    cur = conn.cursor()
-    query = """SELECT id,name FROM Class ORDER BY id""" \
-
-    cur.execute(query)
-    conn.commit()
-    rows = cur.fetchall()
-    return rows
+    bboxes = []
+    for l in fh:
+        arr = l.strip().split(' ')
+        arr[1] = float(arr[1])
+        arr[2] = int(arr[2])
+        arr[3] = int(arr[3])
+        arr[4] = int(arr[4])
+        arr[5] = int(arr[5])
+        bboxes.append(arr)
+        #print(arr)
+    fh.close()
+    return  bboxes
+    #annotpath = os.path.join(annotdir, imid + '.txt')
 
 def loadcolorsfromfile(filepath):
     random.seed(0)
@@ -202,7 +197,8 @@ def loadcolorsfromfile(filepath):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--path', default=None)
+    parser.add_argument('--imdir', required=True)
+    parser.add_argument('--annotdir', required=True)
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
     return args
@@ -210,12 +206,10 @@ def parse_args():
 def main():
     args = parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING)
-    indir = args.path if args.path else os.getcwd()
     root = tkinter.Tk()
-    root.geometry('600x400')
+    root.geometry(WINSIZE)
     root.update()
-    #root.geometry('1280x960')
-    myapp = MyApp(root, indir)
+    myapp = MyApp(root, args.imdir, args.annotdir)
     root.mainloop()
 
 if __name__ == "__main__":
