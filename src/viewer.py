@@ -18,7 +18,7 @@ import random
 ##########################################################DEFINES
 
 class MyApp(tkinter.Frame):
-    def __init__(self, parent=None, imdir='', annotdir=''):
+    def __init__(self, parent=None, imdir='', annotdir='', annotfmt=''):
         super().__init__()
         self.parent = parent
         self.classes = []
@@ -27,6 +27,7 @@ class MyApp(tkinter.Frame):
         self.images = listfiles(imdir)
         self.imdir = imdir
         self.annotdir = annotdir
+        self.annotfmt = annotfmt
 
         self.parent.bind("<Key>", self.onkeypress)
         self.create_canvas()
@@ -74,7 +75,7 @@ class MyApp(tkinter.Frame):
         logging.debug('{:.1f} seconds to display image.'.format(t1-t0))
 
         imageid = os.path.splitext(self.images[self.curid])[0]
-        bboxes = getbboxes_from_txt(imageid, self.annotdir)
+        bboxes = get_bboxes(imageid, self.annotdir, self.annotfmt)
         self.draw_detections(bboxes)
         self.draw_labels(bboxes)
         #self.draw_gndtruths(bboxes)
@@ -177,7 +178,24 @@ def listfiles(indir, ext='jpg'):
 
     return images
 
-def getbboxes_from_txt(imid, annotdir):
+def get_bboxes(imid, annotdir, fmt):
+    """Get bboxes from an annotation format
+
+    Args:
+    imid(str): image name without extension
+    annotdir(str): path to annotations
+
+    Returns:
+    list: [category, score, xmin, ymin, xmax, ymax]
+    """
+    
+    if 'txt' in fmt:
+        return get_bboxes_from_txt(imid, annotdir)
+    elif 'csv' in fmt:
+        return get_bboxes_from_csv(imid, annotdir)
+
+def get_bboxes_from_txt(imid, annotdir):
+
     annotpath = os.path.join(annotdir, imid + '.txt')
     fh = open(annotpath)
 
@@ -193,6 +211,34 @@ def getbboxes_from_txt(imid, annotdir):
     fh.close()
     return  bboxes
 
+def get_bboxes_from_csv(imid, annotdir):
+    """Get bboxes from an txt annotation format with just a single class of objects.
+    It waits for a [xmin,ymin,xmax,ymax,score] csv
+
+    Args:
+    imid(str): image name without extension
+    annotdir(str): path to annotations
+
+    Returns:
+    list: [category, score, xmin, ymin, xmax, ymax]
+    """
+    annotpath = os.path.join(annotdir, imid + '.csv')
+    fh = open(annotpath)
+
+    bboxes = []
+    for l in fh:
+        arr = l.strip().split(',')
+        b = []
+        b.append('X')
+        b.append(float(arr[4]))
+        b.append(int(arr[0]))
+        b.append(int(arr[1]))
+        b.append(int(arr[2]))
+        b.append(int(arr[3]))
+        bboxes.append(b)
+    fh.close()
+    return  bboxes
+
 def loadcolorsfromfile(filepath):
     with open(filepath) as f:
         lines = f.read().splitlines()
@@ -204,6 +250,7 @@ def parse_args():
     parser.add_argument('--imdir', required=True, help='Images directory')
     parser.add_argument('--annotdir', required=True, help='Annotations directory')
     parser.add_argument('--res', default='1280x800', help='Gui spatial resolution')
+    parser.add_argument('--annotfmt', default='txt', help='Annotation format. It can assume "txt", "csv"')
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
     return args
@@ -214,7 +261,7 @@ def main():
     root = tkinter.Tk()
     root.geometry(args.res)
     root.update()
-    myapp = MyApp(root, args.imdir, args.annotdir)
+    myapp = MyApp(root, args.imdir, args.annotdir, args.annotfmt)
     root.mainloop()
 
 if __name__ == "__main__":
