@@ -82,7 +82,7 @@ def parse_annot_yolo(annotpath, withscore=False):
         print('##########################################################')
     return annots
 
-def draw_boxes_and_texts(img, boxes, minthresh=0.5, color=(0, 255, 0), thickness=2):
+def draw_boxes_and_texts(img, boxes, minthresh=0.5, color=(0, 255, 0)):
     """Draw all boxes and text contained in the pd.dataframe @boxes
     (any kind of filtering is left to the caller)
 
@@ -103,6 +103,12 @@ def draw_boxes_and_texts(img, boxes, minthresh=0.5, color=(0, 255, 0), thickness
     pandas.dataframe: dataframe containing the schema in the file
     """
 
+    maxsize = np.max(img.shape)
+    C = 600
+    thickness = int(maxsize / C)
+    thickness = thickness if thickness > 0 else 1
+    fontsz = thickness/3
+
     if 'score' in boxes.columns: printscore = True
     else: printscore = False
     for _, box in boxes.iterrows():
@@ -111,7 +117,7 @@ def draw_boxes_and_texts(img, boxes, minthresh=0.5, color=(0, 255, 0), thickness
         if printscore:
             boxtext += ':{:.2f}'.format(box.score)
         cv2.putText(img, boxtext, (box.left, box.top), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, color, lineType=cv2.LINE_AA) 
+                    fontsz, color, lineType=cv2.LINE_AA, thickness=thickness)
 
 def draw_all_annotations(imgpath, detdir, gnddir, outdir, annotfmt, minthresh=0.5):
     print(imgpath)
