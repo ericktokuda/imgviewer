@@ -28,7 +28,32 @@ def parse_annot(annotpath, annotfmt, withscore=False):
 
     if annotfmt == 'yolo':
         return parse_annot_yolo(annotpath, withscore)
-    return None
+    elif annotfmt == 'csv':
+        return parse_annot_csv(annotpath, withscore)
+
+def parse_annot_csv(annotpath, withscore=False):
+    """Parse annotation file in the following format
+
+    <class>,<score>,<left>,<top>,<right>,<bottom>
+
+    where ',' can be replaced by input
+
+    Args:
+    annotpath(str) : annotation directory path
+    delim(str) : Delimiter. default ','
+
+    Returns:
+    pandas.dataframe: dataframe containing the schema in the file
+    """
+
+    if withscore:
+        classnames = ['left', 'top', 'right', 'bottom', 'score']
+    else:
+        classnames = ['left', 'top', 'right', 'bottom']
+
+    annots = pd.read_csv(annotpath, names=classnames)
+    annots['cls'] = 'person'
+    return annots
 
 def parse_annot_yolo(annotpath, withscore=False):
     """Parse annotation file in the following format
