@@ -11,29 +11,36 @@ import tkinter.font
 import PIL
 import PIL.Image
 import PIL.ImageTk
-import utils
+# import utils
 import time
 import logging
+from logging import debug, info
 import random
+# import os
+# import os.path
+from os.path import join as pjoin
 
 ##########################################################DEFINES
 GNDTRUTHID = 2
 DETECTIONID = 7
 
 class MyApp(tkinter.Frame):
-    def __init__(self, parent=None, initialdir=os.getcwd()):
+    def __init__(self, parent, initialdir=os.getcwd(), annotdir='/tmp'):
         super().__init__()
         self.parent = parent
         self.curid = 0
         self.curdir = initialdir
         self.images = listfiles(initialdir)
-        self.conn = utils.db_connect('config/db.json')
+        self.labels = set()
+        self.labelschanged = False
+        imgslist = []
+
+        self.annotdir = annotdir
         self.parent.bind("<Key>", self.onkeypress)
         self.create_canvas()
         self.colors = ['black'] + loadcolorsfromfile('tkcolors.txt')
         self.update_canvas()
         self.parent.title(self.images[self.curid])
-        #self.create_controls()
         self.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 
     def create_canvas(self):
@@ -70,13 +77,23 @@ class MyApp(tkinter.Frame):
 
         self.im = self.canvas.create_image(posx, posy, image=self.curimage)
         t1 = time.time()
-        logging.debug('{:.1f} seconds to display image.'.format(t1-t0))
-        #self.canvas.create_text((posx, posy), text=imagepath)
+        debug('{:.1f} seconds to display image.'.format(t1-t0))
 
         imageid = os.path.splitext(self.images[self.curid])[0]
-        bboxes = db_getbboxes(self.conn, imageid)
-        self.draw_detections(bboxes)
-        self.draw_gndtruths(bboxes)
+        imgname = self.images[self.curid]
+        annotpath = pjoin(self.annotdir, imgname.replace('.jpg', '.txt'))
+        text_ = ''
+
+        if os.path.exists(annotpath):
+            with open(annotpath) as fh:
+                # text_ += ': ' + fh.read().strip()
+                text_ = fh.read().strip()
+                self.labels = set(filter(len, text_.split(',')))
+        else:
+            self.labels = set()
+
+        self.canvas.create_text(600, 700, fill='black',
+                                font="Times 80 bold", text=text_)
         self.update()
 
     def create_controls(self):
@@ -89,31 +106,59 @@ class MyApp(tkinter.Frame):
                 lambda: self.change_image(+1))
         qbutton = tkinter.Button(frame, text='Quit', command=self.parent.quit)
 
-
         obutton.pack(side=tkinter.LEFT)
         pbutton.pack(side=tkinter.LEFT)
         nbutton.pack(side=tkinter.LEFT)
         qbutton.pack(side=tkinter.LEFT)
         frame.pack()
 
+    def add_label(self, key):
+        if key == 'minus': annotid = '-1'
+        else: annotid = key
+        # print(annotid, self.classes)
+
+        if annotid in self.labels:
+            info('Removing label {}'.format(annotid))
+            self.labels.remove(annotid)
+        else:
+            self.labels.add(annotid)
+
+    def save_annotation(self, imgid):
+        if not self.labelschanged: return
+        if len(self.labels) > 1 and '-1' in self.labels:
+            self.labels.remove('-1')
+        annotpath = pjoin(self.annotdir, imgid + '.txt')
+        fh = open(annotpath, 'w')
+        fh.write(','.join(sorted(self.labels)))
+        fh.close()
+
     def onkeypress(self, event):
         k = event.keysym
 
         if k == 'Left':
+            self.save_annotation(self.images[self.curid].replace('.jpg', ''))
             self.change_image(-1)
+            self.labelschanged = False
         elif k == 'Right':
+            self.save_annotation(self.images[self.curid].replace('.jpg', ''))
             self.change_image(1)
+            self.labelschanged = False
         elif k == 'O':
             self.openfolder()
         elif k == 'S':
             self.createsubtitledialog()
+        elif k == 'q':
+            self.parent.destroy()
+        elif k == '1' or k == '2' or k == '3' or k == 'minus':
+            self.labelschanged = True
+            self.add_label(k)
 
     def createsubtitledialog(self):
-        logging.debug('here inside createsubtitledialog')
+        debug('here inside createsubtitledialog')
         top = tkinter.Toplevel()
         top.title('Colors subtitle')
 
-        classesrows = db_getclasses(self.conn)
+        # classesrows = db_getclasses(self.conn)
 
         for i in range(0, 20):
             can = tkinter.Canvas(top,width=10,height=10)
@@ -130,10 +175,11 @@ class MyApp(tkinter.Frame):
         #elif self.curid >= len(self.images): self.curid = 0
         self.update_canvas()
         self.parent.title(self.images[self.curid])
+        info('Id:{}'.format(self.curid))
 
     def openfolder(self, event):
         self.curdir = tkinter.filedialog.askdirectory()
-        logging.debug("Now I have to update to " + self.curdir)
+        debug("Now I have to update to " + self.curdir)
 
     def draw_gndtruths(self, bboxes):
         self.draw_bboxes(bboxes, GNDTRUTHID, 'black', 0.5, 1)
@@ -202,20 +248,21 @@ def loadcolorsfromfile(filepath):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--path', default=None)
+    parser.add_argument('--imdir', required=True)
+    parser.add_argument('--outdir', default='/tmp/')
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
     return args
 
 def main():
     args = parse_args()
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING)
-    indir = args.path if args.path else os.getcwd()
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    indir = args.imdir if args.imdir else os.getcwd()
     root = tkinter.Tk()
-    root.geometry('600x400')
+    root.geometry('1200x800')
     root.update()
     #root.geometry('1280x960')
-    myapp = MyApp(root, indir)
+    myapp = MyApp(root, indir, args.outdir)
     root.mainloop()
 
 if __name__ == "__main__":
