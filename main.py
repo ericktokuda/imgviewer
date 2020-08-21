@@ -19,28 +19,29 @@ import random
 # import os
 # import os.path
 from os.path import join as pjoin
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
 
 ##########################################################DEFINES
 GNDTRUTHID = 2
 DETECTIONID = 7
 
 class MyApp(tkinter.Frame):
-    def __init__(self, parent, initialdir=os.getcwd(), annotdir='/tmp'):
+    def __init__(self, parent, imdir, annotcsv):
         super().__init__()
         self.parent = parent
         self.curid = 0
-        self.curdir = initialdir
-        self.images = listfiles(initialdir)
+        self.counts = pd.read_csv(annotcsv)
         self.labels = set()
         self.labelschanged = False
+        self.imdir = imdir
         imgslist = []
-
-        self.annotdir = annotdir
         self.parent.bind("<Key>", self.onkeypress)
         self.create_canvas()
         self.colors = ['black'] + loadcolorsfromfile('tkcolors.txt')
         self.update_canvas()
-        self.parent.title(self.images[self.curid])
+        self.parent.title(self.curid)
         self.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 
     def create_canvas(self):
@@ -53,13 +54,12 @@ class MyApp(tkinter.Frame):
         self.im = None
         self.canvas.delete("all")
 
-        imagepath = self.images[self.curid]
+        imagepath = os.path.join(self.imdir, self.counts.loc[self.curid].image)
         w = self.parent.winfo_width()
         h = self.parent.winfo_height()
 
-        #canvasratio = w/(h-30)
         canvasratio = w/(h)
-        pilim = PIL.Image.open(os.path.join(self.curdir, imagepath))
+        pilim = PIL.Image.open(os.path.join(self.imdir, imagepath))
         imratio = pilim.size[0]/pilim.size[1]
 
         if imratio > canvasratio:
@@ -79,19 +79,7 @@ class MyApp(tkinter.Frame):
         t1 = time.time()
         debug('{:.1f} seconds to display image.'.format(t1-t0))
 
-        imageid = os.path.splitext(self.images[self.curid])[0]
-        imgname = self.images[self.curid]
-        annotpath = pjoin(self.annotdir, imgname.replace('.jpg', '.txt'))
-        text_ = ''
-
-        if os.path.exists(annotpath):
-            with open(annotpath) as fh:
-                # text_ += ': ' + fh.read().strip()
-                text_ = fh.read().strip()
-                self.labels = set(filter(len, text_.split(',')))
-        else:
-            self.labels = set()
-
+        text_ = str(self.counts.loc[self.curid].n)
         self.canvas.create_text(600, 700, fill='black',
                                 font="Times 80 bold", text=text_)
         self.update()
@@ -115,7 +103,6 @@ class MyApp(tkinter.Frame):
     def add_label(self, key):
         if key == 'minus': annotid = '-1'
         else: annotid = key
-        # print(annotid, self.classes)
 
         if annotid in self.labels:
             info('Removing label {}'.format(annotid))
@@ -136,11 +123,9 @@ class MyApp(tkinter.Frame):
         k = event.keysym
 
         if k == 'Left':
-            self.save_annotation(self.images[self.curid].replace('.jpg', ''))
             self.change_image(-1)
             self.labelschanged = False
         elif k == 'Right':
-            self.save_annotation(self.images[self.curid].replace('.jpg', ''))
             self.change_image(1)
             self.labelschanged = False
         elif k == 'O':
@@ -158,8 +143,6 @@ class MyApp(tkinter.Frame):
         top = tkinter.Toplevel()
         top.title('Colors subtitle')
 
-        # classesrows = db_getclasses(self.conn)
-
         for i in range(0, 20):
             can = tkinter.Canvas(top,width=10,height=10)
             can.grid(row=i+1, column=1)
@@ -170,11 +153,11 @@ class MyApp(tkinter.Frame):
 
     def change_image(self, delta):
         newid = self.curid + delta 
-        self.curid = newid % len(self.images)
+        self.curid = newid % self.counts.shape[0]
         #if self.curid < 0: self.curid = len(self.images) - 1
         #elif self.curid >= len(self.images): self.curid = 0
         self.update_canvas()
-        self.parent.title(self.images[self.curid])
+        self.parent.title(str(self.curid))
         info('Id:{}'.format(self.curid))
 
     def openfolder(self, event):
@@ -249,6 +232,7 @@ def loadcolorsfromfile(filepath):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--imdir', required=True)
+    parser.add_argument('--counts', required=True)
     parser.add_argument('--outdir', default='/tmp/')
     parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
@@ -262,7 +246,7 @@ def main():
     root.geometry('1200x800')
     root.update()
     #root.geometry('1280x960')
-    myapp = MyApp(root, indir, args.outdir)
+    myapp = MyApp(root, indir, args.counts)
     root.mainloop()
 
 if __name__ == "__main__":
