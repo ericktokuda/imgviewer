@@ -60,6 +60,8 @@ class MyApp(tkinter.Frame):
 
         canvasratio = w/(h)
         pilim = PIL.Image.open(os.path.join(self.imdir, imagepath))
+        if self.counts.loc[self.curid].roll > 0:
+            pilim = pilim.rotate(180)
         imratio = pilim.size[0]/pilim.size[1]
 
         if imratio > canvasratio:
@@ -79,9 +81,12 @@ class MyApp(tkinter.Frame):
         t1 = time.time()
         debug('{:.1f} seconds to display image.'.format(t1-t0))
 
-        text_ = str(self.counts.loc[self.curid].n)
+        text_ = '{} / {}'.format(
+                self.counts.loc[self.curid].pred7n,
+                self.counts.loc[self.curid].realn,)
         self.canvas.create_text(600, 700, fill='black',
                                 font="Times 80 bold", text=text_)
+
         self.update()
 
     def create_controls(self):
@@ -159,6 +164,8 @@ class MyApp(tkinter.Frame):
         self.update_canvas()
         self.parent.title(str(self.curid))
         info('Id:{}'.format(self.curid))
+        imagepath = os.path.join(self.imdir, self.counts.loc[self.curid].image)
+        info('Id:{}'.format(imagepath))
 
     def openfolder(self, event):
         self.curdir = tkinter.filedialog.askdirectory()
